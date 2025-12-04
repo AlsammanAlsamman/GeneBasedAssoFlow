@@ -89,3 +89,4 @@ slurm-*.out
 codes/
 prompts/
 configs_example/
+logs/
