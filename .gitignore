@@ -1,0 +1,91 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# R
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# Snakemake
+.snakemake/
+*.snakemake.log
+
+# Results and outputs
+results/
+output/
+*.genes.annot
+*.genes.out
+*.genes.raw
+*.gsa.out
+*.log
+
+# Reference data (large files)
+*.bim
+*.bed
+*.fam
+*.gmt
+*.gene_info
+g1000_*/
+AMR/
+EUR/
+EAS/
+AFR/
+SAS/
+
+# Intermediate files
+*_snploc.tsv
+*_pval.tsv
+*_annotation.*
+gene_id_to_name.txt
+genesets.txt
+Homo_sapiens.gene_info*
+
+# GWAS summary statistics (can be large)
+*.tsv.gz
+Hisp.tsv
+
+# Config files (keep examples, ignore actual configs with real paths)
+configs/analysis.yml
+configs/config.yml
+configs/software.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+slurm-*.out
+.slurm/
+
+# Compressed files
+*.gz
+*.zip
+*.tar
+*.tar.gz
+
+codes/
+prompts/
+configs_example/
