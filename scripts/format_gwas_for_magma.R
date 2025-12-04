@@ -40,6 +40,12 @@ output_pval <- args_parsed$output_pval
 output_filtered <- args_parsed$output_filtered
 dataset_config_json <- args_parsed$dataset_config
 
+# Check required arguments
+if (is.null(input_file) || is.null(output_snploc) || is.null(output_pval) || is.null(output_filtered) || is.null(dataset_config_json)) {
+  cat("Usage: Rscript format_gwas_for_magma.R --input FILE --output-snploc FILE --output-pval FILE --output-filtered FILE --dataset-config JSON\n")
+  stop("Missing required arguments")
+}
+
 # Parse dataset config
 dataset_config <- fromJSON(dataset_config_json)
 
@@ -91,10 +97,14 @@ if (!is.null(columns$direction) && columns$direction %in% colnames(gwas_data)) {
   cat("No direction column specified\n")
 }
 
-# Keep only needed columns
+# Keep only needed columns - create a copy to avoid reference issues
 keep_cols <- c("SNP", "CHR", "BP", "P")
 if (has_direction) keep_cols <- c(keep_cols, "DIRECTION")
 gwas_clean <- gwas_data[, ..keep_cols]
+
+# DIAGNOSTIC: Check what columns we have
+cat("\nDIAGNOSTIC - Columns in gwas_clean after selection:\n")
+cat("  Columns:", paste(colnames(gwas_clean), collapse=", "), "\n")
 
 # Convert numeric columns
 gwas_clean[, CHR := as.integer(CHR)]
@@ -119,6 +129,38 @@ if (p_threshold < 1.0) {
 if (has_direction) {
   before_direction <- nrow(gwas_clean)
   
+  # DIAGNOSTIC: Check first few Direction values before conversion
+  cat("\nDIAGNOSTIC - Direction values before conversion:\n")
+  cat("  Class:", class(gwas_clean$DIRECTION), "\n")
+  cat("  First 10 values:", paste(head(gwas_clean$DIRECTION, 10), collapse=", "), "\n")
+  cat("  Unique values (first 20):", paste(head(unique(gwas_clean$DIRECTION), 20), collapse=", "), "\n")
+  
+  # Convert Direction to character and trim whitespace
+  gwas_clean[, DIRECTION := as.character(trimws(DIRECTION))]
+  
+  # Convert all '0' characters in Direction strings to '?' for clarity
+  gwas_clean[, DIRECTION := gsub("0", "?", DIRECTION)]
+  
+  # DIAGNOSTIC: Check after conversion
+  cat("\nDIAGNOSTIC - Direction values after conversion (0 -> ?):\n")
+  cat("  Class:", class(gwas_clean$DIRECTION), "\n")
+  cat("  First 10 values:", paste(head(gwas_clean$DIRECTION, 10), collapse=", "), "\n")
+  cat("  Count of strings with '?' (missing):", sum(grepl("\\?", gwas_clean$DIRECTION), na.rm=TRUE), "\n")
+  
+  # First filter: remove rows where Direction is just "0", "?", empty, or NA
+  gwas_clean <- gwas_clean[
+    !is.na(DIRECTION) &
+    DIRECTION != "" &
+    DIRECTION != "0" & 
+    DIRECTION != "?"
+  ]
+  
+  cat("\nSNPs after removing Direction='0', '?', empty, or NA:", nrow(gwas_clean), 
+      "(removed:", before_direction - nrow(gwas_clean), ")\n")
+  
+  # Second filter: check signal content for remaining rows
+  before_signal_filter <- nrow(gwas_clean)
+  
   # Count + and - in direction string
   gwas_clean[, n_plus := nchar(gsub("[^+]", "", DIRECTION))]
   gwas_clean[, n_minus := nchar(gsub("[^-]", "", DIRECTION))]
@@ -126,14 +168,17 @@ if (has_direction) {
   gwas_clean[, direction_length := nchar(DIRECTION)]
   gwas_clean[, n_missing := direction_length - total_signals]
   
-  # Filter: exclude if ALL missing (no + or -) OR missing count exceeds threshold
-  gwas_clean <- gwas_clean[total_signals > 0 & n_missing <= meta_missing_threshold]
+  # Filter: exclude if ALL missing (no + or -), OR missing count exceeds threshold
+  gwas_clean <- gwas_clean[
+    total_signals > 0 & 
+    n_missing <= meta_missing_threshold
+  ]
   
   # Remove temporary columns
   gwas_clean[, c("n_plus", "n_minus", "total_signals", "direction_length", "n_missing") := NULL]
   
-  cat("SNPs after direction filtering (max missing <=", meta_missing_threshold, "):", 
-      nrow(gwas_clean), "(removed:", before_direction - nrow(gwas_clean), ")\n")
+  cat("SNPs after signal filtering (must have +/-, max", meta_missing_threshold, "missing):", 
+      nrow(gwas_clean), "(removed:", before_signal_filter - nrow(gwas_clean), ")\n")
 }
 
 # Final check
@@ -168,5 +213,4 @@ cat("Summary:\n")
 cat("  Total SNPs processed:", nrow(gwas_clean), "\n")
 cat("  Sample size (N):", sample_size, "\n")
 cat("  Output files ready for MAGMA\n")
-cat("  Filtered table:", output_filtered, "\n")"\n")
-cat("  Output files ready for MAGMA\n")
+cat("  Filtered table:", output_filtered, "\n")
