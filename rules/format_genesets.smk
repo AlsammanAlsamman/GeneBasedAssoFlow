@@ -6,17 +6,17 @@ Creates backups of original files with .original suffix
 
 import sys
 sys.path.append("utils")
-from bioconfigme import get_config, get_results_dir
+from bioconfigme import get_results_dir, get_analysis_value, init_configs
 
-# Load configuration
-config_data = get_config()
+# Initialize configs
+init_configs("configs/software.yml", "configs/analysis.yml", "configs/config.yml")
 
 # Get all GMT database paths
-databases = config_data.get("databases", {})
-gmt_files = list(databases.values())
+databases = get_analysis_value("databases")
+gmt_files = list(databases.values()) if databases else []
 
 # Get gene reference file
-gene_ref = config_data["reference"]["gene_loc"]
+gene_ref = get_analysis_value("reference.gene_loc")
 
 # Output
 results_dir = get_results_dir()

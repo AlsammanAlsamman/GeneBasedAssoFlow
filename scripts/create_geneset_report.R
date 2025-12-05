@@ -673,13 +673,38 @@ if (nrow(genes_pass) > 0) {
     genes_pass[, GENE_NAME := as.character(GENE)]
   }
   
-  # For each gene, find which gene-sets contain it
+  # For each gene, find which loci it belongs to and which gene-sets contain it
   genes_pass[, Genesets := ""]
   genes_pass[, N_Genesets := 0]
+  genes_pass[, Locus := ""]
   
   for (i in 1:nrow(genes_pass)) {
     gene_id <- genes_pass$GENE[i]
     gene_id_str <- as.character(gene_id)
+    gene_chr <- genes_pass$CHR[i]
+    gene_start <- genes_pass$START[i]
+    gene_end <- genes_pass$END[i]
+    
+    # Find which locus this gene belongs to
+    if (!is.na(gene_chr) && !is.na(gene_start) && !is.na(gene_end)) {
+      matching_loci <- c()
+      for (j in 1:nrow(loci)) {
+        locus_chr <- loci$chr[j]
+        locus_start <- loci$start[j] - distance_bp
+        locus_end <- loci$end[j] + distance_bp
+        locus_name <- loci$Locus[j]
+        
+        if (gene_chr == locus_chr &&
+            ((gene_start >= locus_start && gene_start <= locus_end) ||
+             (gene_end >= locus_start && gene_end <= locus_end) ||
+             (gene_start <= locus_start && gene_end >= locus_end))) {
+          matching_loci <- c(matching_loci, locus_name)
+        }
+      }
+      if (length(matching_loci) > 0) {
+        genes_pass[i, Locus := paste(matching_loci, collapse=", ")]
+      }
+    }
     
     # Find all gene-sets containing this gene
     matching_genesets <- c()
@@ -709,6 +734,7 @@ if (nrow(genes_pass) > 0) {
     Chr = if("CHR" %in% names(genes_pass)) genes_pass$CHR else NA,
     Start = if("START" %in% names(genes_pass)) genes_pass$START else NA,
     End = if("END" %in% names(genes_pass)) genes_pass$END else NA,
+    Locus = genes_pass$Locus,
     P_Value = genes_pass[[p_col_name]],
     N_Significant_Genesets = genes_pass$N_Genesets,
     Significant_Genesets = genes_pass$Genesets
