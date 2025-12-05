@@ -402,6 +402,57 @@ if (length(matched_list) > 0) {
   wb$add_cell_style(sheet="Summary", dims="A2:B9", horizontal="center", vertical="center")
   wb$set_col_widths(sheet="Summary", cols=1:2, widths="auto")
   
+  # Create Gene_Filtering_Info sheet
+  cat("Creating Gene_Filtering_Info sheet...\n")
+  wb$add_worksheet("Gene_Filtering_Info")
+  
+  # Calculate filtering statistics for different thresholds
+  threshold_stats <- data.frame(
+    Threshold = c("5E-10", "5E-9", "5E-8", "5E-7", "5E-6", "5E-5", "5E-4", "5E-3", "0.01", "0.05", "0.1", "0.5", "1.0"),
+    Threshold_Numeric = c(5E-10, 5E-9, 5E-8, 5E-7, 5E-6, 5E-5, 5E-4, 5E-3, 0.01, 0.05, 0.1, 0.5, 1.0),
+    N_Genes = sapply(c(5E-10, 5E-9, 5E-8, 5E-7, 5E-6, 5E-5, 5E-4, 5E-3, 0.01, 0.05, 0.1, 0.5, 1.0), 
+                     function(t) nrow(genes[get(p_col_name) <= t])),
+    Percentage = sapply(c(5E-10, 5E-9, 5E-8, 5E-7, 5E-6, 5E-5, 5E-4, 5E-3, 0.01, 0.05, 0.1, 0.5, 1.0), 
+                        function(t) round(100 * nrow(genes[get(p_col_name) <= t]) / nrow(genes), 2))
+  )
+  
+  # Add description row at top
+  info_data <- data.frame(
+    Info = c("Total Genes Analyzed",
+             "Applied Gene-Set Filtering Threshold",
+             "Genes Included in Gene-Set Analysis",
+             "Percentage of Genes Included",
+             "",
+             "Gene Count by P-value Threshold:",
+             rep("", nrow(threshold_stats))),
+    Value = c(nrow(genes),
+              "See config: geneset_gene_p_condition",
+              "See log files for actual filtering",
+              "Depends on threshold setting",
+              "",
+              "",
+              rep("", nrow(threshold_stats)))
+  )
+  
+  # Combine with threshold table
+  wb$add_data(sheet="Gene_Filtering_Info", x=info_data, start_col=1, start_row=1)
+  wb$add_data(sheet="Gene_Filtering_Info", x=threshold_stats, start_col=1, start_row=nrow(info_data)+2)
+  
+  # Style headers
+  wb$add_fill(sheet="Gene_Filtering_Info", dims="A1:B1", color=wb_color(hex="4472C4"))
+  wb$add_font(sheet="Gene_Filtering_Info", dims="A1:B1", color=wb_color(hex="FFFFFF"), bold=TRUE)
+  
+  threshold_header_row <- nrow(info_data) + 2
+  threshold_header_range <- paste0("A", threshold_header_row, ":D", threshold_header_row)
+  wb$add_fill(sheet="Gene_Filtering_Info", dims=threshold_header_range, color=wb_color(hex="4472C4"))
+  wb$add_font(sheet="Gene_Filtering_Info", dims=threshold_header_range, color=wb_color(hex="FFFFFF"), bold=TRUE)
+  
+  # Center align
+  wb$add_cell_style(sheet="Gene_Filtering_Info", dims=paste0("A1:D", nrow(info_data)+1+nrow(threshold_stats)), 
+                    horizontal="center", vertical="center")
+  
+  wb$set_col_widths(sheet="Gene_Filtering_Info", cols=1:4, widths="auto")
+  
   # Create Loci_Representative sheet
   cat("Creating Loci_Representative sheet...\n")
   wb$add_worksheet("Loci_Representative")
@@ -409,6 +460,23 @@ if (length(matched_list) > 0) {
   # Extract unique loci with representative gene info - preserve column order from main sheet
   loci_rep_cols <- c(locus_info_cols, additional_locus_cols, representative_cols)
   loci_rep <- unique(result[, loci_rep_cols, with=FALSE])
+  
+  # Add columns for number of genes at different P-value thresholds (5E-10 to 5E-3)
+  thresholds <- c(5E-10, 5E-9, 5E-8, 5E-7, 5E-6, 5E-5, 5E-4, 5E-3)
+  threshold_names <- c("N_Genes_5E10", "N_Genes_5E9", "N_Genes_5E8", "N_Genes_5E7", 
+                       "N_Genes_5E6", "N_Genes_5E5", "N_Genes_5E4", "N_Genes_5E3")
+  
+  for (i in seq_along(thresholds)) {
+    threshold <- thresholds[i]
+    col_name <- threshold_names[i]
+    loci_rep[, (col_name) := 0]
+    
+    for (locus in loci_rep$Locus) {
+      # Count genes at this threshold (not including "No significant genes" placeholder)
+      n_genes <- nrow(result[Locus == locus & !is.na(get(p_col_name)) & get(p_col_name) <= threshold])
+      loci_rep[Locus == locus, (col_name) := n_genes]
+    }
+  }
   
   # Replace empty Representative_Gene with "No significant genes"
   loci_rep[Representative_Gene == "" | is.na(Representative_Gene), Representative_Gene := "No significant genes"]
