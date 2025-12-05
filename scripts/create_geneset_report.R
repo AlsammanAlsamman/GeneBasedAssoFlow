@@ -20,6 +20,7 @@ option_list <- list(
   make_option("--target", type="character", help="Target analysis name"),
   make_option("--genesets", type="character", help="Comma-separated list of gene-set database keys"),
   make_option("--geneset-p-threshold", type="numeric", help="P-value threshold for gene-set significance"),
+  make_option("--geneset-gene-p-condition", type="numeric", help="P-value threshold for gene filtering (informational)"),
   make_option("--loci-gene-p-threshold", type="numeric", help="P-value threshold for gene-loci matching"),
   make_option("--loci-distance-kb", type="numeric", help="Distance threshold in kb for loci matching"),
   make_option("--output", type="character", help="Output Excel file path")
@@ -29,8 +30,8 @@ opt <- parse_args(OptionParser(option_list=option_list))
 
 # Validate arguments
 required_args <- c("genes-file", "gene-loc", "loci-file", "results-base", "target", 
-                   "genesets", "geneset-p-threshold", "loci-gene-p-threshold", 
-                   "loci-distance-kb", "output")
+                   "genesets", "geneset-p-threshold", "geneset-gene-p-condition",
+                   "loci-gene-p-threshold", "loci-distance-kb", "output")
 missing_args <- required_args[!required_args %in% names(opt) | sapply(opt[required_args], is.null)]
 if (length(missing_args) > 0) {
   stop("Missing required arguments: ", paste(missing_args, collapse=", "))
@@ -448,6 +449,7 @@ for (geneset in unique(combined_genesets$VARIABLE)) {
     # Create row with zeros
     row_data <- data.table(
       Database = combined_genesets[VARIABLE == geneset, Database][1],
+      Database_Key = combined_genesets[VARIABLE == geneset, Database_Key][1],
       Geneset = geneset,
       Geneset_P = combined_genesets[VARIABLE == geneset, P][1],
       Total_Genes = combined_genesets[VARIABLE == geneset, NGENES][1]
@@ -470,6 +472,7 @@ for (geneset in unique(combined_genesets$VARIABLE)) {
     # No genes pass threshold - create row with zeros
     row_data <- data.table(
       Database = combined_genesets[VARIABLE == geneset, Database][1],
+      Database_Key = combined_genesets[VARIABLE == geneset, Database_Key][1],
       Geneset = geneset,
       Geneset_P = combined_genesets[VARIABLE == geneset, P][1],
       Total_Genes = combined_genesets[VARIABLE == geneset, NGENES][1]
@@ -485,6 +488,7 @@ for (geneset in unique(combined_genesets$VARIABLE)) {
   }  # Count genes in each locus
   row_data <- data.table(
     Database = combined_genesets[VARIABLE == geneset, Database][1],
+    Database_Key = combined_genesets[VARIABLE == geneset, Database_Key][1],
     Geneset = geneset,
     Geneset_P = combined_genesets[VARIABLE == geneset, P][1],
     Total_Genes = combined_genesets[VARIABLE == geneset, NGENES][1]
@@ -513,6 +517,43 @@ for (geneset in unique(combined_genesets$VARIABLE)) {
 
 if (length(matrix_list) > 0) {
   geneset_loci_matrix <- rbindlist(matrix_list, fill=TRUE)
+  
+  # Add column for genes passing threshold
+  cat("\nCalculating genes passing threshold (P <", opt$`geneset-gene-p-condition`, ") per gene-set...\n")
+  geneset_loci_matrix[, N_Genes_Pass_Threshold := 0]
+  
+  for (i in 1:nrow(geneset_loci_matrix)) {
+    geneset_name <- geneset_loci_matrix$Geneset[i]
+    db_key <- geneset_loci_matrix$Database_Key[i]
+    
+    # Get genes in this gene-set from GMT data
+    geneset_genes <- NULL
+    if (db_key %in% names(all_gmt_data)) {
+      if (geneset_name %in% names(all_gmt_data[[db_key]])) {
+        geneset_genes <- all_gmt_data[[db_key]][[geneset_name]]
+      }
+    }
+    
+    if (!is.null(geneset_genes) && length(geneset_genes) > 0) {
+      # Convert to numeric Entrez IDs
+      geneset_genes_numeric <- suppressWarnings(as.numeric(geneset_genes))
+      geneset_genes_numeric <- geneset_genes_numeric[!is.na(geneset_genes_numeric)]
+      
+      # Count genes passing threshold
+      n_pass <- nrow(genes[GENE %in% geneset_genes_numeric & get(p_col_name) < opt$`geneset-gene-p-condition`])
+      geneset_loci_matrix[i, N_Genes_Pass_Threshold := n_pass]
+    }
+  }
+  
+  # Reorder columns to put N_Genes_Pass_Threshold after Total_Genes
+  total_genes_idx <- which(names(geneset_loci_matrix) == "Total_Genes")
+  threshold_idx <- which(names(geneset_loci_matrix) == "N_Genes_Pass_Threshold")
+  if (length(total_genes_idx) > 0 && length(threshold_idx) > 0) {
+    other_cols <- setdiff(names(geneset_loci_matrix), c("N_Genes_Pass_Threshold"))
+    insert_pos <- total_genes_idx + 1
+    new_order <- c(other_cols[1:total_genes_idx], "N_Genes_Pass_Threshold", other_cols[(total_genes_idx+1):length(other_cols)])
+    setcolorder(geneset_loci_matrix, new_order)
+  }
   
   # Sort by Geneset_P
   geneset_loci_matrix <- geneset_loci_matrix[order(Geneset_P)]
@@ -556,6 +597,159 @@ if (length(matrix_list) > 0) {
   wb$set_col_widths(sheet="Geneset_Loci_Matrix", cols=1:ncol(geneset_loci_matrix), widths="auto")
 } else {
   cat("No gene-sets found to create matrix.\n")
+}
+
+# Sheet 3: Analysis Parameters
+cat("\nCreating Analysis_Parameters sheet...\n")
+params_data <- data.table(
+  Parameter = c(
+    "Target Analysis",
+    "Gene-set Databases",
+    "Gene-set P-value Threshold",
+    "Gene P-value Threshold (for gene filtering)",
+    "Loci Gene P-value Threshold",
+    "Loci Distance Threshold (kb)",
+    "Number of Significant Gene-sets",
+    "Number of Loci",
+    "Total Genes Analyzed"
+  ),
+  Value = c(
+    opt$target,
+    paste(geneset_list, collapse=", "),
+    format(opt$`geneset-p-threshold`, scientific=TRUE),
+    format(opt$`geneset-gene-p-condition`, scientific=TRUE),
+    format(opt$`loci-gene-p-threshold`, scientific=TRUE),
+    opt$`loci-distance-kb`,
+    nrow(combined_genesets),
+    nrow(loci),
+    nrow(genes)
+  )
+)
+
+wb$add_worksheet("Analysis_Parameters", grid_lines=FALSE)
+wb$add_data(sheet="Analysis_Parameters", x=params_data, start_col=1, start_row=1)
+
+# Style header
+wb$add_fill(sheet="Analysis_Parameters", dims="A1:B1", color=wb_color(hex="4472C4"))
+wb$add_font(sheet="Analysis_Parameters", dims="A1:B1", color=wb_color(hex="FFFFFF"), bold=TRUE)
+wb$add_cell_style(sheet="Analysis_Parameters", dims="A1:B1", horizontal="center", vertical="center")
+
+# Style parameter column
+wb$add_font(sheet="Analysis_Parameters", dims=paste0("A2:A", nrow(params_data)+1), bold=TRUE)
+
+# Auto-size columns
+wb$set_col_widths(sheet="Analysis_Parameters", cols=1:2, widths="auto")
+
+# Sheet 4: Significant Genes (genes passing threshold)
+cat("\nCreating Significant_Genes sheet...\n")
+
+# Get genes passing threshold - use genes_with_pos which already has location info
+genes_pass <- genes_with_pos[get(p_col_name) < opt$`geneset-gene-p-condition`]
+cat("Genes passing threshold (P <", opt$`geneset-gene-p-condition`, "):", nrow(genes_pass), "\n")
+
+if (nrow(genes_pass) > 0) {
+  # Rename position columns if they exist as CHR_final, START_final, END_final
+  if ("CHR_final" %in% names(genes_pass)) {
+    setnames(genes_pass, "CHR_final", "CHR", skip_absent=TRUE)
+  }
+  if ("START_final" %in% names(genes_pass)) {
+    setnames(genes_pass, "START_final", "START", skip_absent=TRUE)
+  }
+  if ("END_final" %in% names(genes_pass)) {
+    setnames(genes_pass, "END_final", "END", skip_absent=TRUE)
+  }
+  
+  # Add gene names from gene_loc if not already present
+  if (!"GENE_NAME" %in% names(genes_pass)) {
+    genes_pass <- merge(genes_pass, 
+                        gene_loc[, .(GENE, GENE_NAME)], 
+                        by="GENE", all.x=TRUE)
+  }
+  
+  # Fill missing GENE_NAME with GENE ID
+  if ("GENE_NAME" %in% names(genes_pass)) {
+    genes_pass[is.na(GENE_NAME), GENE_NAME := as.character(GENE)]
+  } else {
+    genes_pass[, GENE_NAME := as.character(GENE)]
+  }
+  
+  # For each gene, find which gene-sets contain it
+  genes_pass[, Genesets := ""]
+  genes_pass[, N_Genesets := 0]
+  
+  for (i in 1:nrow(genes_pass)) {
+    gene_id <- genes_pass$GENE[i]
+    gene_id_str <- as.character(gene_id)
+    
+    # Find all gene-sets containing this gene
+    matching_genesets <- c()
+    
+    for (db_key in names(all_gmt_data)) {
+      for (geneset_name in names(all_gmt_data[[db_key]])) {
+        geneset_genes <- all_gmt_data[[db_key]][[geneset_name]]
+        if (gene_id_str %in% geneset_genes) {
+          # Check if this gene-set is significant
+          if (geneset_name %in% combined_genesets$VARIABLE) {
+            matching_genesets <- c(matching_genesets, geneset_name)
+          }
+        }
+      }
+    }
+    
+    if (length(matching_genesets) > 0) {
+      genes_pass[i, Genesets := paste(matching_genesets, collapse=", ")]
+      genes_pass[i, N_Genesets := length(matching_genesets)]
+    }
+  }
+  
+  # Create output table - build dynamically based on available columns
+  sig_genes_table <- data.table(
+    Gene_ID = genes_pass$GENE,
+    Gene_Name = if("GENE_NAME" %in% names(genes_pass)) genes_pass$GENE_NAME else as.character(genes_pass$GENE),
+    Chr = if("CHR" %in% names(genes_pass)) genes_pass$CHR else NA,
+    Start = if("START" %in% names(genes_pass)) genes_pass$START else NA,
+    End = if("END" %in% names(genes_pass)) genes_pass$END else NA,
+    P_Value = genes_pass[[p_col_name]],
+    N_Significant_Genesets = genes_pass$N_Genesets,
+    Significant_Genesets = genes_pass$Genesets
+  )
+  
+  # Sort by P-value
+  sig_genes_table <- sig_genes_table[order(P_Value)]
+  
+  # Add to workbook
+  wb$add_worksheet("Significant_Genes")
+  wb$add_data(sheet="Significant_Genes", x=sig_genes_table, start_col=1, start_row=1)
+  
+  # Format P-value column as scientific notation
+  p_col_idx <- which(names(sig_genes_table) == "P_Value")
+  if (length(p_col_idx) > 0) {
+    p_col_letter <- LETTERS[p_col_idx]
+    wb$add_numfmt(sheet="Significant_Genes", 
+                  dims=paste0(p_col_letter, "2:", p_col_letter, nrow(sig_genes_table)+1), 
+                  numfmt="0.00E+00")
+  }
+  
+  # Style header
+  header_range <- paste0("A1:", LETTERS[ncol(sig_genes_table)], "1")
+  wb$add_fill(sheet="Significant_Genes", dims=header_range, color=wb_color(hex="4472C4"))
+  wb$add_font(sheet="Significant_Genes", dims=header_range, color=wb_color(hex="FFFFFF"), bold=TRUE)
+  wb$add_cell_style(sheet="Significant_Genes", dims=header_range, horizontal="center", vertical="center")
+  
+  # Center align all columns except Genesets
+  for (col_idx in 1:(ncol(sig_genes_table)-1)) {
+    col_letter <- LETTERS[col_idx]
+    wb$add_cell_style(sheet="Significant_Genes", 
+                      dims=paste0(col_letter, "2:", col_letter, nrow(sig_genes_table)+1),
+                      horizontal="center", vertical="center")
+  }
+  
+  # Auto-size columns
+  wb$set_col_widths(sheet="Significant_Genes", cols=1:ncol(sig_genes_table), widths="auto")
+  
+  cat("Significant genes table created:", nrow(sig_genes_table), "genes\n")
+} else {
+  cat("No genes pass the threshold. Skipping Significant_Genes sheet.\n")
 }
 
 # Save workbook

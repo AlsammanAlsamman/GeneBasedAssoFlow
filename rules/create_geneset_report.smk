@@ -30,6 +30,7 @@ rule create_geneset_report:
         loci_file = lambda wildcards: get_dataset(get_target_analysis(wildcards.target)['dataset'])['loci_file'],
         genesets = lambda wildcards: ",".join(get_target_analysis(wildcards.target).get('genesets', [])),
         geneset_p_threshold = lambda wildcards: get_target_analysis(wildcards.target).get('geneset_p_threshold', 0.05),
+        geneset_gene_p_condition = lambda wildcards: get_target_analysis(wildcards.target).get('geneset_gene_p_condition', 1.0),
         loci_gene_p_threshold = lambda wildcards: get_target_analysis(wildcards.target)['loci_gene_p_thereshold'],
         loci_distance_kb = lambda wildcards: get_target_analysis(wildcards.target)['loci_distance_thereshold_kb'],
         r_module = get_software_module('r'),
@@ -58,6 +59,7 @@ rule create_geneset_report:
             --target {params.target} \
             --genesets {params.genesets} \
             --geneset-p-threshold {params.geneset_p_threshold} \
+            --geneset-gene-p-condition {params.geneset_gene_p_condition} \
             --loci-gene-p-threshold {params.loci_gene_p_threshold} \
             --loci-distance-kb {params.loci_distance_kb} \
             --output {output.report} \

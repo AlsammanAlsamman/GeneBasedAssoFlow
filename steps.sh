@@ -1,6 +1,9 @@
 #!/bin/bash
 # Pipeline execution steps
 
+# Step 0: Format gene-set GMT files (convert symbols to Entrez IDs)
+./submit.sh --snakefile rules/format_genesets.smk /s/nath-lab/alsamman/___Analysis___/Hispanic_2025/MAGMA_PipiLIne/results/format_genesets.done
+
 # Step 1: Format GWAS data for MAGMA
 # Structure: results/{target_analysis}/magma/formatted/
 ./submit.sh --snakefile rules/format_magma_gwas_data.smk /s/nath-lab/alsamman/___Analysis___/Hispanic_2025/MAGMA_PipiLIne/results/example_analysis/magma/formatted/example_analysis_format.done

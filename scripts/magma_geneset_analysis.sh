@@ -17,10 +17,6 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_PREFIX="$2"
             shift 2
             ;;
-        --gene-cond-p)
-            GENE_COND_P="$2"
-            shift 2
-            ;;
         --magma-module)
             MAGMA_MODULE="$2"
             shift 2
@@ -39,11 +35,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-# Set default for GENE_COND_P if not provided
-if [[ -z "$GENE_COND_P" ]]; then
-    GENE_COND_P="1.0"
-fi
 
 # Validate required arguments
 if [[ -z "$GENE_RESULTS" || -z "$SET_ANNOT" || -z "$OUTPUT_PREFIX" ]]; then
@@ -74,52 +65,19 @@ echo "========================================="
 echo "Gene results file: $GENE_RESULTS"
 echo "Gene-set annotation: $SET_ANNOT"
 echo "Output prefix: $OUTPUT_PREFIX"
-echo "Gene P-value condition: $GENE_COND_P"
 echo "========================================="
-
-# Check if we need to filter genes by P-value
-FILTERED_GENES="$GENE_RESULTS"
-if (( $(echo "$GENE_COND_P < 1.0" | bc -l) )); then
-    echo "Filtering genes: only genes with P < $GENE_COND_P will be included"
-    
-    # Create filtered gene results file
-    FILTERED_GENES="${OUTPUT_PREFIX}_filtered.genes.raw"
-    
-    # Read header and data, filter by P-value
-    # .genes.raw format: GENE CHR START STOP NSNPS NPARAM N ZSTAT P
-    head -1 "$GENE_RESULTS" > "$FILTERED_GENES"
-    awk -v threshold="$GENE_COND_P" 'NR>1 && $9 < threshold' "$GENE_RESULTS" >> "$FILTERED_GENES"
-    
-    NGENES_BEFORE=$(tail -n +2 "$GENE_RESULTS" | wc -l)
-    NGENES_AFTER=$(tail -n +2 "$FILTERED_GENES" | wc -l)
-    echo "Genes before filtering: $NGENES_BEFORE"
-    echo "Genes after filtering (P < $GENE_COND_P): $NGENES_AFTER"
-    
-    # Check if any genes pass the threshold
-    if [ "$NGENES_AFTER" -eq 0 ]; then
-        echo "WARNING: No genes pass the P-value threshold!"
-        echo "Gene-set analysis will likely find no significant results."
-    fi
-else
-    echo "Including all genes in gene-set analysis (no P-value conditioning)"
-fi
 
 # Run MAGMA gene-set analysis
 echo "Running MAGMA gene-set analysis..."
-echo "Command: $MAGMA_EXEC --gene-results $FILTERED_GENES --set-annot $SET_ANNOT --out $OUTPUT_PREFIX"
+echo "Command: $MAGMA_EXEC --gene-results $GENE_RESULTS --set-annot $SET_ANNOT --out $OUTPUT_PREFIX"
 
 $MAGMA_EXEC \
-    --gene-results "$FILTERED_GENES" \
+    --gene-results "$GENE_RESULTS" \
     --set-annot "$SET_ANNOT" \
     --out "$OUTPUT_PREFIX"
 
 # Check if analysis was successful
 MAGMA_EXIT_CODE=$?
-
-# Clean up filtered file if created
-if [ "$FILTERED_GENES" != "$GENE_RESULTS" ] && [ -f "$FILTERED_GENES" ]; then
-    rm -f "$FILTERED_GENES"
-fi
 
 if [[ $MAGMA_EXIT_CODE -eq 0 ]]; then
     echo "========================================="

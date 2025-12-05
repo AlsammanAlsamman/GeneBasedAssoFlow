@@ -24,7 +24,6 @@ rule magma_geneset_analysis:
         done = RESULTS_DIR + "/{target}/magma/geneset_analysis/{target}_{geneset}_geneset_analysis.done"
     params:
         geneset_file = lambda wildcards: get_database(wildcards.geneset),
-        gene_cond_p = lambda wildcards: get_target_analysis(wildcards.target).get('geneset_gene_p_condition', 1.0),
         magma_module = get_software_module('magma'),
         magma_path = get_software_path('magma'),
         magma_command = get_software_command('magma'),
@@ -65,7 +64,6 @@ rule magma_geneset_analysis:
                 "--gene-results", input.genes_raw,
                 "--set-annot", params.geneset_file,
                 "--output-prefix", params.output_prefix,
-                "--gene-cond-p", str(params.gene_cond_p),
                 "--magma-module", params.magma_module,
                 "--magma-path", params.magma_path,
                 "--magma-command", params.magma_command
