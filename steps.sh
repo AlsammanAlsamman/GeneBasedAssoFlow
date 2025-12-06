@@ -26,3 +26,6 @@
 
 # Step 7: Create gene-set enrichment report
 ./submit.sh --snakefile rules/create_geneset_report.smk /s/nath-lab/alsamman/___Analysis___/Hispanic_2025/MAGMA_PipiLIne/results/example_analysis/magma/geneset_analysis/example_analysis_geneset_report.done
+
+# Step 8: Generate SNP-Gene comparison plots (Manhattan and Miami plots)
+./submit.sh --snakefile rules/plot_snp_gene_comparison.smk /s/nath-lab/alsamman/___Analysis___/Hispanic_2025/MAGMA_PipiLIne/results/example_analysis/plots/example_analysis_plots.done
