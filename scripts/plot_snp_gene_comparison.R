@@ -21,6 +21,13 @@ suppressPackageStartupMessages({
   # Add to library paths
   .libPaths(c(personal_lib, .libPaths()))
   
+  # Install patchwork if not available (required for manhattantwin)
+  if (!require("patchwork", quietly = TRUE)) {
+    cat("Installing patchwork package to personal library:", personal_lib, "\n")
+    install.packages("patchwork", lib = personal_lib, repos = "https://cloud.r-project.org")
+  }
+  library(patchwork)
+  
   # Install manhattantwin if not available
   if (!require("manhattantwin", quietly = TRUE)) {
     cat("Installing manhattantwin from GitHub to personal library:", personal_lib, "\n")
@@ -28,7 +35,7 @@ suppressPackageStartupMessages({
       install.packages("devtools", lib = personal_lib, repos = "https://cloud.r-project.org")
       library(devtools, lib.loc = personal_lib)
     }
-    devtools::install_github("AlsammanAlsamman/manhattantwin", lib = personal_lib)
+    devtools::install_github("AlsammanAlsamman/manhattantwin", lib = personal_lib, upgrade = "never")
     library(manhattantwin, lib.loc = personal_lib)
   } else {
     library(manhattantwin)
@@ -129,11 +136,15 @@ cat("  Loaded", nrow(loci), "loci\n")
 cat("  Assigning locus labels to SNPs...\n")
 gwas[, locus := NA_character_]
 
+# Standardize loci column names (handle both Chr/CHR and Start/START)
+loci_cols <- names(loci)
+setnames(loci, tolower(loci_cols))
+
 for (i in 1:nrow(loci)) {
-  locus_chr <- loci$Chr[i]
-  locus_start <- loci$Start[i]
-  locus_end <- loci$End[i]
-  locus_name <- loci$Locus[i]
+  locus_chr <- loci$chr[i]
+  locus_start <- loci$start[i]
+  locus_end <- loci$end[i]
+  locus_name <- loci$locus[i]
   
   # Assign locus name to SNPs within this region
   gwas[chr == locus_chr & bp >= locus_start & bp <= locus_end, locus := locus_name]
@@ -350,6 +361,7 @@ if (opt$plot_per_chromosome) {
     )
     
     # Generate Miami plot for this chromosome using manhattantwin
+    # All chromosome plots go in the same chromosome_based folder
     if (nrow(snp_chr_data) > 0 && nrow(gene_chr_data) > 0) {
       manhattantwin::create_mirrored_manhattan_plot(
         snp_chr_data,
@@ -374,7 +386,7 @@ if (opt$plot_per_chromosome) {
         output_width = 12,
         output_height = 8
       )
-      cat("    Saved: Chr", chr_i, " Miami plot\n")
+      cat("    Saved: Chr", chr_i, " Miami plot (PNG & PDF)\n")
     } else if (nrow(snp_chr_data) > 0) {
       # Only SNPs
       manhattantwin::plot_single_manhattan(
@@ -394,7 +406,7 @@ if (opt$plot_per_chromosome) {
         output_width = 12,
         output_height = 6
       )
-      cat("    Saved: Chr", chr_i, " SNP plot\n")
+      cat("    Saved: Chr", chr_i, " SNP plot (PNG & PDF)\n")
     } else {
       # Only genes
       manhattantwin::plot_single_manhattan(
@@ -414,7 +426,7 @@ if (opt$plot_per_chromosome) {
         output_width = 12,
         output_height = 6
       )
-      cat("    Saved: Chr", chr_i, " Gene plot\n")
+      cat("    Saved: Chr", chr_i, " Gene plot (PNG & PDF)\n")
     }
   }
 }

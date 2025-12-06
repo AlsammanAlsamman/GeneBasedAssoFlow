@@ -29,13 +29,13 @@ rule plot_snp_gene_comparison:
         report_done = RESULTS_DIR + "/{target}/magma/geneset_analysis/{target}_geneset_report.done"
     output:
         # Genome-wide plots (manhattantwin adds _pub.png suffix)
-        manhattan_gw = RESULTS_DIR + "/{target}/plots/genome_wide/{target}_snp_pub.png",
-        miami_gw = RESULTS_DIR + "/{target}/plots/genome_wide/{target}_miami.png",
+        manhattan_gw = RESULTS_DIR + "/{target}/magma/snp_gene/genome_wide/{target}_snp_pub.png",
+        miami_gw = RESULTS_DIR + "/{target}/magma/snp_gene/genome_wide/{target}_miami.png",
         # Filtered data files
-        snp_filtered = RESULTS_DIR + "/{target}/plots/filtered_data/{target}_snps_filtered.txt",
-        gene_filtered = RESULTS_DIR + "/{target}/plots/filtered_data/{target}_genes_filtered.txt",
+        snp_filtered = RESULTS_DIR + "/{target}/magma/snp_gene/filtered_data/{target}_snps_filtered.txt",
+        gene_filtered = RESULTS_DIR + "/{target}/magma/snp_gene/filtered_data/{target}_genes_filtered.txt",
         # Done marker
-        done = RESULTS_DIR + "/{target}/plots/{target}_plots.done"
+        done = RESULTS_DIR + "/{target}/magma/snp_gene/{target}_plots.done"
     params:
         analysis = "{target}",
         snp_p = lambda wildcards: get_target_analysis(wildcards.target).get('snp_plot_p_threshold', 5e-2),
@@ -45,9 +45,9 @@ rule plot_snp_gene_comparison:
         n_controls = lambda wildcards: get_dataset(get_target_analysis(wildcards.target)['dataset']).get('controls', 'NA'),
         plot_per_chr = lambda wildcards: get_target_analysis(wildcards.target).get('plot_per_chromosome', True),
         plot_only_sig = lambda wildcards: get_target_analysis(wildcards.target).get('plot_only_sig_chromosomes', True),
-        genome_wide_dir = RESULTS_DIR + "/{target}/plots/genome_wide",
-        per_chr_dir = RESULTS_DIR + "/{target}/plots/per_chromosome",
-        filtered_dir = RESULTS_DIR + "/{target}/plots/filtered_data",
+        genome_wide_dir = RESULTS_DIR + "/{target}/magma/snp_gene/genome_wide",
+        per_chr_dir = RESULTS_DIR + "/{target}/magma/snp_gene/chromosome_based",
+        filtered_dir = RESULTS_DIR + "/{target}/magma/snp_gene/filtered_data",
         r_module = get_software_module('r'),
         script = "scripts/plot_snp_gene_comparison.R"
     log:
